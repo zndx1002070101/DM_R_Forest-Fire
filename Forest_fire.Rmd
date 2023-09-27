@@ -1,0 +1,392 @@
+---
+title: "Forest_Fire"
+author: "Alex"
+date: "2023-09-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+
+
+
+## 1. Introduction of the data
+The data was the occurence of fire the Montesinho natural park, northeast of Portugal. It ranges from January 2000 to December 2023. 
+
+Here are descriptions of the variables in the data set and the range of values for each taken from the paper:
+
+* X: X-axis spatial coordinate within the Montesinho park map: 1 to 9
+* Y: Y-axis spatial coordinate within the Montesinho park map: 2 to 9
+* month: Month of the year: 'jan' to 'dec'
+* day: Day of the week: 'mon' to 'sun'
+* FFMC: Fine Fuel Moisture Code index from the FWI system: 18.7 to 96.20
+* DMC: Duff Moisture Code index from the FWI system: 1.1 to 291.3
+* DC: Drought Code index from the FWI system: 7.9 to 860.6
+* ISI: Initial Spread Index from the FWI system: 0.0 to 56.10
+* temp: Temperature in Celsius degrees: 2.2 to 33.30
+* RH: Relative humidity in percentage: 15.0 to 100
+* wind: Wind speed in km/h: 0.40 to 9.40
+* rain: Outside rain in mm/m2 : 0.0 to 6.4
+* area: The burned area of the forest (in ha): 0.00 to 1090.84
+
+The data can be categorized into:
+
+1. Spatial data: (X,Y)
+2. Temporal: month and day
+3. FWI: FFC, DMC, DC, and ISI
+4. M(measured data): temp, RH, wind, rain
+
+Forest fires can create ecological problems and endanger human lives and property. Understanding when they occur and what causes them is important for managing them.The goal is to predict the area based on other variables.
+
+P.S. The data we'll be working with in this guided project is associated with a [scientific research paper](chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/http://www3.dsi.uminho.pt/pcortez/fires.pdf) on predicting the occurrence of forest fires in Portugal using modeling techniques.
+
+
+## 2. Data Cleaning
+### 2.1 Read data and check the dimension
+```{r}
+library(readr)
+fires <- read_csv('forestfires.csv', col_types = cols())
+
+# Check the dimensions of the data
+dimension <- dim(fires)
+dimension
+```
+The csv file has 517 rows and 13 columns.
+
+
+### 2.2 Check the data type of each column
+```{r}
+# Check the data type
+library(dplyr)
+glimpse(fires)
+```
+Only two columns: month and data are string data, other eleven columns are all numeric data. For categorical data, we can check the unique values and count. For the numeric data, histogram or scatter plot is a good way to see the data distribution or trends.
+In addition, wheter there are missing values also needs to be examined.
+
+
+### 2.3 Check if there are missing value in each column
+```{R}
+# missing values
+colSums(is.na(fires))
+```
+No missing values for each column. Therefore, we will use all the data for the modeling.
+
+
+### 2.4 Check and process different type of data
+
+#### 2.4.1 Check the datatype of each column
+```{r}
+# Check the unique values of the columns with categorical values
+
+fires %>% pull(month) %>% unique
+fires %>% pull(day) %>% unique
+
+```
+In month, the unique values are twelve months from january to december
+For day, it is seven days in a week.
+
+
+
+#### 2.4.2 Processing the categorical data
+```{r}
+
+# Factor the month and day
+month_order <- c('jan', 'feb', 'mar',  
+                 'apr', 'may', 'jun', 
+                 'jul', 'aug', 'sep', 
+                 'oct', 'nov', 'dec')
+dow_order <- c("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+fires <- fires %>% mutate(month = factor(month, levels=month_order),
+                          day = factor(day, levels=dow_order)
+)
+
+# Count the unique values
+table(fires$month) %>% sort()
+table(fires$day)  %>% sort()
+
+# Encoding the categorical data
+# Month
+fires_m <- fires %>% mutate(
+  month = case_when(
+    month=='jan' ~ 1,
+    month=='feb' ~ 2,
+    month=='mar' ~ 3,
+    month=='apr' ~ 4,
+    month=='may' ~ 5,
+    month=='jun' ~ 6,
+    month=='jul' ~ 7,
+    month=='aug' ~ 8,
+    month=='sep' ~ 9,
+    month=='oct' ~ 10,
+    month=='nov' ~ 11,
+    month=='dec' ~ 12
+  )
+)
+
+# Day Sunday is the first day
+fires_m <- fires_m %>% mutate(
+  day = case_when(
+    day=='sun' ~ 7,
+    day=='mon' ~ 1,
+    day=='tue' ~ 2,
+    day=='wed' ~ 3,
+    day=='thu' ~  4,
+    day=='fri' ~ 5,
+    day=='sat' ~ 6,
+  )
+)
+
+
+```
+Month and day have its own sequence. factor(data, levels=new_sequence) is used to set the the month and day from start to end of a week/year. In data visualization, the sequence will show in the factorized order. The counts shows, lots of fires occurred in August and September. The fire counts does not show obvious trend in different days. These table data can be visualized in bar plot.
+
+
+## 3. Data Visualization
+### 3.1 Visulization of the categorical data
+```{r}
+# Bar plot vs month
+
+library(ggplot2)
+fires_m %>% ggplot(aes(x=month)) + geom_bar() + labs(title='Fire counts vs month', x='Month', y='Counts of fires') + theme(plot.title = element_text(hjust = 0.5)) + scale_x_continuous(breaks=seq(1,12,1))
+
+
+# Bar plot vs day
+library(ggplot2)
+fires_m %>% ggplot(aes(x=day)) + geom_bar() + labs(title='Fire counts vs day', x='Day', y='Counts of fires') + theme(plot.title = element_text(hjust = 0.5)) + scale_x_continuous(breaks=seq(1,7,1))
+
+```
+
+Large amount of fires (~175) occur in August and September. It is probably because of the high temperature. In addition, 60 fires took place in March. Probably because it is very dry in winter.
+The trend of the fire counts in different day is not obvious
+
+
+### 3.2 Visulization of trends of the variables
+```{r}
+library(tidyr)
+# Pivot_longer function to get a column with all the variables and a column with all the values
+fires_long <- fires_m %>% pivot_longer(cols=c('FFMC', 'DMC', 'DC', 'ISI', 'temp', 'RH', 'wind', 'rain'), names_to = 'column', values_to='value')
+
+# Use facet_wrap to plot the figures 
+fires_long %>% ggplot(aes(x=month, y=value)) + geom_point() + facet_wrap(vars(column), scales="free_y") + xlim(0,14) + scale_x_continuous(breaks=seq(2, 12,2)) 
+
+```
+
+DC, DMC, FFMC and ISI are index based on the rain, temperature, wind and humidity. The wind and RH (relative humidity) data is scattered. There is an outlier in the rain dta. Temperature tends to be high in summer. Our goal is to predict the burned area based on these variables.
+
+
+
+### 3.3 Visulization of target variable (burned area) and other factors
+```{r}
+
+# Histogram of burned area
+fires_long %>% ggplot(aes(x=area)) + geom_histogram(bins=30, color='black', fill='lightblue') + labs(title='Histogram of burned area') + theme(plot.title=element_text(hjust = 0.5))
+
+
+# Burned area vs RH, rain...
+
+library(ggplot2)
+fires_long <- fires_m %>% pivot_longer(cols=c('FFMC', 'DMC', 'DC', 'ISI', 'temp', 'RH', 'wind', 'rain'), names_to = 'column', values_to='value')
+
+fires_long %>% ggplot(aes(x=value, y=area)) + geom_point() + facet_wrap(vars(column), scales="free_x")
+```
+The histogram of the burned area shows right skewed. Most of the burned area is 0 and few burned area are large, which can seen in the scatter plot. From the scatter plot, most of the value are below 300. The outliers can be checked
+
+
+```{r}
+
+# Checking the outlier
+library(ggplot2)
+fires_long %>% filter(area>300) %>% ggplot(aes(x=value, y=area)) + geom_point() + facet_wrap(vars(column),scales="free_x", ncol=4)
+
+```
+It can be seen only tow data points of area are above 300.
+
+## 4. Machine Learning models
+
+
+### 4.1 Prepare data for training
+
+
+
+
+
+Data will be grouped into STFWI, STM, FWI, and M to fit the model. RAE and RMSE is for the scoring.
+```{r}
+
+# Transform area column data to reduce the skewness
+
+fires_c <- fires_m %>% mutate(log_area= log(area+1))
+
+ggplot(data=fires_c, aes(x=log_area)) + geom_histogram(bins=30)
+
+
+library(caret)
+
+# Group the data
+
+library(tibble)
+STFWI <- fires_c %>% 
+  select(X, Y, month, day, FFMC, DMC, DC, ISI, log_area) %>% scale %>% as_tibble()
+
+STM <- fires_c %>%
+  select(X, Y, month, day, temp, RH, wind, rain, log_area)%>% scale%>% as_tibble()
+
+FWI <- fires_c %>%
+  select(FFMC, DMC, DC, ISI, log_area) %>% scale%>% as_tibble()
+
+M <- fires_c %>% 
+  select(temp, RH, wind, rain, log_area) %>% scale%>% as_tibble()
+
+# Train and test data for each group
+
+set.seed(1)
+
+train_indices <- createDataPartition(fires_m$area, p=0.8, list=FALSE)
+
+  
+  STFWI_train <- STFWI[train_indices, ]
+  STFWI_test <- STFWI[-train_indices, ]
+  
+  STM_train <- STM[train_indices, ]
+  STM_test <- STM[-train_indices, ]
+  
+  FWI_train <- FWI[train_indices, ]
+  FWI_test <- FWI[-train_indices, ]
+  
+  M_train <- M[train_indices, ]
+  M_test <- M[-train_indices, ]
+
+```
+
+
+
+### Model 1: Linear Regression
+```{r}
+
+# STFWI
+fit_stfwi <- lm(log_area ~ X+Y+month+day+FFMC+DMC+DC+ISI, data=STFWI_train)
+predict_stfwi <- predict(fit_stfwi, newdata = STFWI_test)
+score_stfwi <- postResample(pred = predict_stfwi, obs = STFWI_test$log_area)
+score_stfwi
+
+
+
+# STM
+fit_stm <- lm(log_area ~ X+Y+month+day+temp+RH+wind+rain, data=STM_train)
+predict_stm <- predict(fit_stm, newdata = STM_test)
+score_stm <- postResample(pred = predict_stm, obs = STM_test$log_area)
+score_stm
+
+
+# FWI
+fit_fwi <- lm(log_area ~ FFMC+DMC+DC+ISI, data=FWI_train)
+predict_fwi <- predict(fit_fwi, newdata = FWI_test)
+score_fwi <- postResample(pred = predict_fwi, obs = STFWI_test$log_area)
+score_fwi
+
+# M
+fit_m <- lm(log_area ~ temp+RH+wind+rain, data=M_train)
+predict_m <- predict(fit_m, newdata = M_test)
+score_m <- postResample(pred = predict_m, obs = M_test$log_area)
+score_m
+
+# Summarize
+lm_sum <- bind_rows(score_stfwi, score_stm, score_fwi, score_m)
+
+data_group <- c('STFWI', 'STM', 'FWI', 'M')
+lm_fit <-bind_cols(data_group, lm_sum) %>% as.tibble()
+colnames(lm_fit)[1] = 'LM'
+lm_fit
+
+```
+
+
+### Model 2: KNN
+
+```{r}
+
+# Create a model with cross validation
+library(caret)
+
+train_control <- trainControl(method='cv', number=5)
+tune_grid <- expand.grid(k=1:20)
+
+#STFWI
+
+knn_stfwi <- train(log_area ~ X+Y+month+day+FFMC+DMC+DC+ISI, 
+                    data = STFWI_train,
+                   method='knn',
+                   preprocess=c('center', 'scale'),
+                   trainControl=train_control,
+                   tuneGrid=tune_grid)
+plot(knn_stfwi)
+
+predict_stfwi <- predict(knn_stfwi, STFWI_test)
+res_stfwi <- postResample(predict_stfwi, STFWI_test$log_area)
+res_stfwi
+
+#STM
+
+knn_stm <- train(log_area ~ X+Y+month+day+temp+RH+wind+rain,
+                    data = STM_train,
+                   method='knn',
+                   preprocess=c('center', 'scale'),
+                   trainControl=train_control,
+                   tuneGrid=tune_grid)
+plot(knn_stm)
+
+predict_stm <- predict(knn_stm, STM_test)
+res_stm<- postResample(predict_stm, STM_test$log_area)
+res_stm
+
+
+#FWI
+
+knn_fwi <- train(log_area ~ FFMC+DMC+DC+ISI,
+                    data = FWI_train,
+                   method='knn',
+                   preprocess=c('center', 'scale'),
+                   trainControl=train_control,
+                   tuneGrid=tune_grid)
+plot(knn_fwi)
+
+predict_fwi <- predict(knn_fwi, FWI_test)
+res_fwi<- postResample(predict_fwi, FWI_test$log_area)
+res_fwi
+
+
+#M
+
+knn_m <- train(log_area ~ temp+RH+wind+rain,
+                    data = M_train,
+                   method='knn',
+                   preprocess=c('center', 'scale'),
+                   trainControl=train_control,
+                   tuneGrid=tune_grid)
+plot(knn_m)
+
+predict_fwi <- predict(knn_m, M_test)
+res_m<- postResample(predict_m, M_test$log_area)
+res_m
+
+# Summarize KNN
+
+knn_sum <- bind_rows(res_stfwi, res_stm, res_fwi, res_m)
+
+data_group <- c('STFWI', 'STM', 'FWI', 'M')
+knn_fit <-bind_cols(data_group, lm_sum) %>% as.tibble()
+colnames(knn_fit)[1] = 'KNN'
+knn_fit
+
+# Summarize lm and knn
+cols <-  c('STFWI_lm', 'STFWI_knn','STM_lm', 'STM_knn','FWI_lm', 'FWI_knn', 'M_lm', 'M_knn')
+combine <- bind_rows(score_stfwi, score_stfwi, score_stm, res_stm, score_fwi, res_fwi, score_m,  res_m)
+
+combine_scores <- bind_cols(cols, combine)
+combine_scores
+
+```
+
+The linear model and knn have the same scores for SFTWI and M). For STM and FWI, linear model outperforms. Using STFWI has good scores.

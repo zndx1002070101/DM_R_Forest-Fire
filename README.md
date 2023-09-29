@@ -6,3 +6,5 @@
    * `Linear Regression NYC Property Sale Prediction.RMD` covers `linear regression` and `multiple linear models`.
    * `Forest_fire.RMD` covers the `linear model` and `knn` with cross-validation
    * `Spam filter.RMD` covers the data cleaning of `string`s and `Naive Bayes' Theorem`
+3. `HTML` files
+   * You can just download `HTML` files with the output of the codes. 

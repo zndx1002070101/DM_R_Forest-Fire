@@ -1,0 +1,218 @@
+---
+title: "New York Property Price"
+author: "Alex"
+date: "2023-09-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message=FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+The data is a subset of condominium sales data from all five boroughs of New York City. 
+
+The purpose of this Guided Project is to explore the following questions:
+
+1. How well does the size of a condominium (measured in gross square feet) explain or predict sale price across New York City as a whole?
+* To answer this, we'll explore property sales data for all five boroughs combined.
+2. How well does the size of a condominium explain or predict sale price for each individual borough?
+*For this question, we'll build, analyze, and compare linear models for each borough.
+
+Along the way, we'll also see how erroneous sale price entries influence our models, and we will devise methods to remove problematic entries.
+
+
+## 1. Read data
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(ggplot2)
+library(caret)
+library(broom)
+
+# Read data
+ny <- read_csv('NYC_property_sales.csv',  col_types = cols())
+head(ny)
+
+# Data type
+map_df(ny, typeof)
+
+
+# Missing data
+colSums(is.na(ny))
+
+
+# Using plot, price vs gross square feet
+
+NYC_condos <- ny %>%
+  filter(building_class_at_time_of_sale=='R4')
+
+ggplot(data=NYC_condos, aes(x=gross_square_feet/1e3, y=sale_price/1e6)) + geom_point(alpha=0.5) + 
+  scale_y_continuous(labels=scales::comma)  + 
+  geom_smooth(method='lm', se=FALSE) + 
+  theme_bw() + 
+  labs(title='Condos Sale Price vs Gross Square Feet', x='Gross Square Feet (k sqft)', y= 'Sale Price (M $)')
+
+
+# Zoom-in
+ggplot(data=NYC_condos, aes(x=gross_square_feet/1e3, y=sale_price/1e6)) + geom_point(alpha=0.5) + 
+  scale_y_continuous(labels=scales::comma) + 
+  xlim(0, 5) + 
+  ylim(0, 20) + 
+  geom_smooth(method='lm', se=FALSE) + 
+  theme_bw() + 
+  labs(title='Zoom-in Condos Sale Price vs Gross Square Feet', x='Gross Square Feet (k sqft)', y= 'Sale Price (M $)')
+
+# Facet wrap
+
+ggplot(data=NYC_condos, aes(x=gross_square_feet/1e3, y=sale_price/1e6)) + geom_point(alpha=0.5) + 
+  scale_y_continuous(labels=scales::comma) +  
+  geom_smooth(method='lm', se=FALSE) + 
+  theme_bw() + 
+  labs(title='Sale Price vs Gross Square Feet', x='Gross Square Feet (k sqft)', y= 'Sale Price (M $)') + 
+  facet_wrap(vars(borough), ncol=2, scales='free')
+
+
+```
+
+Generally, the sale price increasing with the size. Queens seems weaker linear relationship. The outlier occurs in Manhattan, which has 25 and 200 k-sqft with price of 250 M dollars. Most of the house size are below 2000 sqft.Brooklyn has several houses with sale price 30 million. 
+
+## 2. Data Cleaning
+
+### 2.1 Check the details of the outlier and decide keep or drop it
+```{r}
+# check the price outliers
+
+NYC_condos %>% 
+  filter(sale_price >100e6) %>%
+  select(address, zip_code, gross_square_feet, sale_price, sale_date)
+
+```
+1. [240 M property is located in 220 Central Park South](https://www.6sqft.com/billionaire-ken-griffin-buys-238m-nyc-penthouse-the-most-expensive-home-sold-in-the-u-s/]. It is skyscraper. It is composed of two sections: a 70-story, 950-foot (290 m) tower on 58th Street, which is the 21st-tallest building in New York City, as well as an 18-story section on Central Park South, both of which contain a limestone facade. Most of the 118 apartments are duplex apartments, although some of the units have been combined to create larger units. The building has a porte-cochère, a wine cellar, private dining rooms, and various recreational facilities
+2. [200 M is the located in 165 East 66th St, Resi](https://therealdeal.com/new-york/2019/04/12/cim-group-acquires-resi-portion-of-ues-luxury-rental-for-200m/). It is a UES luxury rental tower.
+These two are not commercial properties and should be cleaned.
+
+### 2.2 Duplicated addresses houses
+
+```{r}
+
+dup_address <- NYC_condos %>% 
+  filter(duplicated(NYC_condos$address)) %>%
+  select(address, sale_price)
+
+```
+There are 40 units at 554 4 Avenue, with the same sale_price of 29620207$. It is more likely that the sale price is for 40 unit. The average gross square feet is 843 and sale price per unit is 740505 dollar. 
+
+
+### 2.3 Clean these duplicted address houses
+```{r}
+
+multi_unit_sales <- NYC_condos %>% 
+  group_by(sale_price, sale_date) %>%
+  filter(n()>3) %>%
+  arrange(sale_price) 
+
+condos_cc <- NYC_condos %>%
+  filter(sale_price < 10e6) %>%
+  anti_join(multi_unit_sales)
+
+
+ggplot(data=condos_cc, aes(x=gross_square_feet/1e3, y=sale_price/1e6)) + geom_point(alpha=0.5) + 
+  scale_y_continuous(labels=scales::comma) +  
+  geom_smooth(method='lm', se=FALSE) + 
+  theme_bw() + 
+  labs(title='Sale Price vs Gross Square Feet', x='Gross Square Feet (k sqft)', y= 'Sale Price (M $)') + 
+  facet_wrap(vars(borough), ncol=2, scales='free')
+
+```
+After cleaning the multiple unit sales, the linear relationship is very prominent.
+
+## 3. Linear model fitting
+```{r}
+
+condos_lm <- lm(sale_price ~ gross_square_feet, data=condos_cc)
+condos_lm_org <- lm(sale_price ~ gross_square_feet, data=NYC_condos)
+
+library(tibble)
+lm_fit <- summary(condos_lm)
+lm_org_fit <- summary(condos_lm_org)
+lm_org_fit[2]
+lm_org_fit
+
+lm_org_fit$coefficients [, 1]
+lm_org_fit$coefficients
+
+
+# confident interval
+confint(condos_lm)
+confint(condos_lm_org)
+
+# RSE
+c(sigma(condos_lm_org), sigma(condos_lm))
+
+lm_fit$r.square
+lm_org_fit$r.square
+
+lm_fit$adj.r.square
+lm_org_fit$adj.r.square
+
+```
+Both the original and cleaned data fit reject the null hypothesis.
+After cleaning, the R square increased from 0.32 to 0.66. 
+
+
+## Nest functions:create multiple linear models
+```{r}
+# Create and nest linear model, tidy_coeff, glance_coeff, augment_coff
+
+condos_nest <-
+  condos_cc %>%
+  group_by(borough) %>%
+  nest() %>%
+  mutate(linear_model = map(.x=data, .f= ~lm(sale_price ~ gross_square_feet, data=.))) %>%
+  mutate(tidy_coef = map(.x=linear_model,.f=tidy, conf.int = TRUE )) %>%
+  mutate(glance_coef=map(.x=linear_model, .f=glance)) %>%
+  mutate(augment_coef=map2(.x=linear_model, .y=data, .f=augment))
+
+
+# Unnest tidy_coef, tidy_slope, glance_coef  
+tidy_coef <- condos_nest %>%
+  select(borough, tidy_coef) %>%
+  unnest(cols = tidy_coef)
+tidy_coef
+
+
+tidy_slope <- tidy_coef %>%
+  filter(term=='gross_square_feet') %>%
+  arrange(desc(estimate))
+
+glance_coef <- condos_nest %>%
+  select(borough, glance_coef) %>%
+  unnest(cols=glance_coef) %>%
+  arrange(desc(r.squared))
+glance_coef
+
+
+augment_coef <- condos_nest %>%
+  select(borough, augment_coef) %>%
+  unnest(cols=augment_coef)
+augment_coef 
+
+# Correlation coefficients
+condos_cor <-
+  condos_cc %>%
+  group_by(borough) %>%
+ summarize(cor= cor(gross_square_feet, sale_price)) %>%
+  arrange(desc(cor))
+condos_cor
+
+# Compare correlation coefficients and RMSE
+
+bind_cols(condos_cor, RSME=glance_coef$r.squared) %>% arrange(-cor)
+
+```
+The correlation coefficients have the same trends as RSME.

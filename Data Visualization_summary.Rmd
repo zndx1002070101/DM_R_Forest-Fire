@@ -1,0 +1,129 @@
+---
+title: "Data Visualization"
+author: "Alex"
+date: "2023-09-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 3. Data Visualization
+
+The data is the life expectation.
+* Year: the year of birth
+* Race: the races represented in the measured population
+* Sex: the sex of the measured population
+* Avg_Life_Expec: the average life expectancy, in years, at birth of people born in a given year
+* Age_Adj_Death_Rate: the age adjusted death rate of people born in a given year — the age adjusted death rate is a metric that adjusts death rate for populations' age distributions to make population comparisons equitable
+
+Before data visualization, data has to be cleaned. 
+
+
+### 3.1 Read data and check the data
+
+```{r}
+library(readr)
+data <- read_csv('life_expec.csv')
+
+# Class of each column
+library(purrr)
+data %>% map_df(class)
+
+# Check missing values
+colSums(is.na(data))
+
+# Check the unique categorical values
+library(dplyr)
+data %>% distinct(Race)
+data %>% distinct(Sex)
+
+```
+
+
+### 3.2 Data Visualization
+
+#### 3.2.1 Data distribution (one colume)
+
+```{r}
+library(ggplot2)
+
+# Histogram
+data %>% ggplot(aes(x=Avg_Life_Expec)) + geom_histogram(bins=20)
+data %>% ggplot(aes(x=Avg_Life_Expec, fill=Race)) + geom_histogram(bins=20)
+
+
+# Density
+data %>% ggplot(aes(x=Avg_Life_Expec)) + geom_density()
+data %>% ggplot(aes(x=Avg_Life_Expec, fill=Race)) + geom_density(alpha=0.3) 
+data %>% ggplot(aes(x=Avg_Life_Expec, color=Race)) + geom_density()
+
+# Barplot, good for discrete data, count different categories
+
+data %>% ggplot(aes(x=Race, fill='red')) + geom_bar() +  theme_bw()
+
+
+```
+#### 3.2.2 Data trends
+```{r}
+# Line plot
+library(ggplot2)
+data %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_line()
+
+data %>% filter(Race=='All Races' & Sex != 'Both Sexes') %>% ggplot(aes(x=Year, y=Avg_Life_Expec, color=Sex)) + geom_line() 
+
+data %>% filter(Race=='All Races' & Sex != 'Both Sexes') %>% ggplot(aes(x=Year, y=Avg_Life_Expec, lty=Sex)) + geom_line()
+
+
+data %>% filter(Race!='All Races' & Sex != 'Both Sexes') %>% ggplot(aes(x=Year, y=Avg_Life_Expec, color= Race, lty=Sex)) + geom_line()
+
+# Scatter plot
+data %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_point()
+
+# Smooth
+data %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_point() + geom_smooth(method = 'lm', se=FALSE)
+
+# boxplot
+data %>% ggplot(aes(x=Avg_Life_Expec)) + geom_density() 
+
+
+# boxplot
+data %>% ggplot(aes(x=Sex, y=Avg_Life_Expec)) + geom_boxplot() 
+data %>% ggplot(aes(x=Race, y=Avg_Life_Expec)) + geom_boxplot()
+
+
+# Multiple figures
+data  %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_line() + facet_wrap(vars(Sex), ncol=2)
+
+data  %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_line() + facet_grid(vars(Sex))
+
+data  %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_line() + facet_grid(rows=vars(Sex), cols=vars(Race))
+
+```
+
+#### 3.2.3 Aesthetics
+
+```{r}
+
+# Add title, xlabel, ylabel and adjust the position, fontsize, and color
+
+data %>% ggplot(aes(x=Year, y=Avg_Life_Expec)) + geom_line(color='red', linewidth=0.2, linetype='dashed')+ labs(title='Average life expectation vs Year', x= 'Year', y='Average life expectation') + theme_bw() + theme(plot.title=element_text(hjus=0.5, size=18, color='orange'), axis.title=element_text(size=16, color='blue'), axis.text = element_text(size=14, color='red')) 
+
+
+
+# Add legend
+library(tidyr)
+df <- data %>% mutate(Age_Adj_Death_Rate=Age_Adj_Death_Rate/10) %>% pivot_longer(cols=c(Avg_Life_Expec, Age_Adj_Death_Rate), names_to='column', values_to='value')
+
+df %>% filter(Race == 'All Races' & Sex == 'Both Sexes') %>% ggplot(aes(x=Year, y=value, lty=column)) + geom_line()+scale_color_manual(
+    name='Trend', 
+    values= c('forestgreen', 'orangered'),
+    labels=c('Avg. Life Expectancy', 'Death Rate (Age Adjusted)')
+) +
+  theme(legend.position = 'top')
+
+
+```
+

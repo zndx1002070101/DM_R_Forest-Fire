@@ -1,0 +1,288 @@
+---
+title: "Spam filter"
+author: "Yuan Li"
+date: "2023-09-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message=FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Goals
+
+The goal of this project is to use Naive Bayes' Theorem algorithm to build a spam filter for SMS messages.
+
+1. Humans provide a computer with information on what spam looks like and what non-spam looks like
+2. The computer uses that human knowledge to estimate probabilities for new messages — probabilities for spam and non-spam.
+3. Finally, the computer classifies a new message based on the probability values it calculated in step 2 — if the probability for spam is greater, then it classifies the message as spam. Otherwise, it classifies it as non-spam. In cases where these two probabilities are near-equal, we may want a human to classify the message. We'll come back to this issue in the guided project)
+
+The datatype in the file is string. Lots of string functions are applied.  
+
+
+## Read the data
+```{r}
+
+library(purrr)
+library(readr)
+library(dplyr)
+library(stringr)
+library(tibble)
+library(tidyr)
+library(caret)
+
+# Read the data and check the data
+data<- read_csv('spam.csv')
+
+head(data)
+
+# colnames
+colnames(data)
+
+## dimension
+dimension <- dim(data)
+dimension
+
+## missing values
+colSums(is.na(data))
+
+# Datatype
+map_df(data, class)
+
+
+# Unique values
+data %>% distinct(label)
+
+# Frequency table
+table(data[1])/nrow(data)
+
+```
+The spam file has 1000 rows and 2 columns with no missing value: label and sms. There are two labels - ham and spam: 85% ham and 15% spam.  
+
+
+
+## Prepare training and test dataset
+
+80% of the data is used for training, 10% for test, 10% for cross validation. The training, test data and cross validation has similiar ratio of ham and spam sms.
+
+```{r}
+# Calculate some helper values to split the dataset
+
+set.seed(1)
+n <- nrow(data)
+n_training <- 0.8 * n
+n_cv <- 0.1 * n
+n_test <- 0.1 * n
+
+# Create the random indices for training set
+train_indices <- sample(1:n, size = n_training, replace = FALSE)
+
+# Get indices not used by the training set
+remaining_indices <- setdiff(1:n, train_indices)
+
+# Remaining indices are already randomized, just allocate correctly
+cv_indices <- remaining_indices[1:(length(remaining_indices)/2)]
+test_indices <- remaining_indices[((length(remaining_indices)/2) + 1):length(remaining_indices)]
+
+# Use the indices to create each of the datasets
+train <- data[train_indices,]
+cv <- data[cv_indices,]
+test <- data[test_indices,]
+
+
+table(train$label)/nrow(train)
+table(test$label)/nrow(test)
+table(cv$label)/nrow(cv)
+```
+
+
+
+## Data cleaning
+
+We will need to analyze the probability of each in sms, so the sms needs to be cleaned. 
+
+```{r}
+
+# Data cleaning
+train_1 <- train %>%
+  mutate(sms=str_to_lower(sms) %>%
+  str_squish %>%
+  str_replace_all("[[:punct:]]", '') %>%
+  str_replace_all("[[:digit:]]", '') %>%
+  str_replace_all("[\u0091\u0094\u0092\u0096\n\t]", "") 
+  )
+
+```
+For each sms, it is a string. So string functions are used. The strings are changed to lower case. The punctuation, digit number, and special symbols, tab, \n are removed.
+
+
+
+## Creating the Vocabulary
+Create a vocabulary of the unique valus in all the sms. Then it will be used to P(word|ham) and P(word|spam) for each word in the sms.
+```{r}
+
+train_c <- train_1%>% 
+  mutate(sms=str_split(sms, ' '))
+
+vol <- train_c %>% distinct(sms) %>% unlist %>% unique
+n_vocabulary <- length(vol)
+n_vocabulary
+
+
+# Another way to create volcabulary
+
+vocabulary <- NULL
+messages <- train_c %>%  pull(sms) # the result form pull is character
+
+# Iterate through the messages and add to the vocabulary
+for (m in messages) {
+  vocabulary <- c(vocabulary, m)
+}  # the for loop can be replaced with unlist
+
+# Remove duplicates from the vocabulary 
+vocabulary_n <- vocabulary %>% unique()
+n_vocabulary <- length((vocabulary_n))
+n_vocabulary
+
+```
+
+##  Calculating the counts of each word in spam and ham messages. It can be used to calculate the P(word|label) and then P(label|word) in a new message.
+
+```{r}
+
+alpha <- 1
+n_spam <- sum(train_c$label=='spam')
+n_ham <- sum(train_c$label=='ham')
+
+# Calculate the probability of p_spam and p_ham
+p_spam <-  mean(train_c$label=='spam')
+p_ham <- 1 - p_spam
+
+
+# Calculate P(word|lham) and p(word|spam)
+
+spam_words <- train_c %>% 
+  filter(label=='spam') %>%
+  pull(sms) %>%  unlist
+
+ham_words <- train_c %>% 
+  filter(label=='ham') %>%
+  pull(sms) %>%
+  unlist
+
+
+# The count of words in spam and ham sms 
+spam_count <- map_int(vol, function(x) sum(spam_words==x)) # it is much faster than for loop
+ham_count <- map_int(vol, function(x) sum(ham_words==x))
+
+counts <- tibble(vocabulary=vol, spam_counts=spam_count, ham_counts=ham_count)
+
+```
+
+
+## Classifying A New Message
+
+```{r}
+
+classify <- function(m, alpha=1) {
+  m_c <- str_to_lower(m) %>%
+  str_squish %>%
+  str_replace_all("[[:punct:]]", '') %>%
+  str_replace_all("[[:digit:]]", '') %>%
+  str_replace_all("[\u0091\u0094\u0092\u0096\n\t]", "")
+  
+  words <- str_split(m_c, ' ')[[1]] # get the vector 
+
+  # Check the neww ords not included in the volcabulary
+  new_words <- tibble(vocabulary=setdiff(words, vocabulary), spam_prob=1, ham_prob=1)
+
+  
+  
+  word_probs <- counts %>% 
+    filter(vol %in% words) %>%
+    mutate(spam_prob = (spam_counts + alpha) / (n_spam + alpha * n_vocabulary),
+           ham_prob = (ham_counts + alpha) /(n_ham + alpha * n_vocabulary)) %>%
+    bind_rows(new_words) %>%
+    pivot_longer(cols=c('spam_prob', 'ham_prob'),
+                 names_to='type',
+                 values_to = 'probs') %>%
+    group_by(type) %>%
+    summarize(prob_c = prod(probs))
+  
+  p_word_given_spam <- word_probs %>% filter(type=='spam_prob') %>% pull(prob_c) # p(word|spam)
+  p_word_given_ham <- word_probs %>% filter(type=='ham_prob') %>% pull(prob_c) # p(word|ham)
+  p_spam_given_message <- p_spam * p_word_given_spam
+  p_ham_given_message <- p_ham * p_word_given_ham
+  c <- if_else(p_spam_given_message>p_ham_given_message, 'spam', 'ham')
+  return(c)
+}
+
+
+
+```
+
+## Training data accuracy
+```{r}
+
+final_train <- train %>%
+  mutate(train_predict = map_chr(train$sms, function(x) {classify(x)}))
+
+# Results of classification on training
+
+confusion <- table(final_train$train_predict, final_train$label)
+confusion
+
+accuracy <- (confusion[1,1] +confusion[2,2])/ sum(confusion)
+accuracy 
+
+
+```
+
+# Hyperparameter (alpha) Tuning
+
+```{r}
+alpha_grid <- seq(0.05, 1, by = 0.05)
+cv_accuracy <- NULL
+
+for (alpha in alpha_grid) {
+  
+  # Predict the classification of each message in cross validation
+  cv_1 <- cv %>% 
+    mutate(
+      prediction = map_chr(sms, function(m) { classify(m, alpha = alpha) })
+    ) 
+  # Assess the accuracy of the classifier on cross-validation set
+  confusion <- table(cv_1$label, cv_1$prediction)
+  acc <- (confusion[1,1] + confusion[2,2] ) / sum(confusion)
+  cv_accuracy <- c(cv_accuracy, acc)
+}
+
+# Check out what the best alpha value is
+tibble(
+  alpha = alpha_grid,
+  accuracy = cv_accuracy
+)
+
+```
+
+
+# Test Set Performance
+
+```{r}
+# Reestablishing the proper parameters
+
+optimal_alpha <- 0.05
+
+# Using optimal alpha with training parameters, perform final predictions
+test_1 <- test %>% 
+  mutate(
+    prediction = map_chr(sms, function(m) { classify(m, alpha = optimal_alpha)} )
+    )
+  
+confusion <- table(test_1$prediction, test_1$label)
+confusion 
+test_accuracy <- (confusion[1,1] + confusion[2,2]) / sum(confusion)
+test_accuracy
+
+```

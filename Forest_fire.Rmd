@@ -209,9 +209,6 @@ It can be seen only tow data points of area are above 300.
 ### 4.1 Prepare data for training
 
 
-
-
-
 Data will be grouped into STFWI, STM, FWI, and M to fit the model. RAE and RMSE is for the scoring.
 ```{r}
 
@@ -219,7 +216,7 @@ Data will be grouped into STFWI, STM, FWI, and M to fit the model. RAE and RMSE 
 
 fires_c <- fires_m %>% mutate(log_area= log(area+1))
 
-ggplot(data=fires_c, aes(x=log_area)) + geom_histogram(bins=30)
+ggplot(data=fires_c, aes(x=log_area)) + geom_histogram(bins=30, color='black', fill='lightblue')
 
 
 library(caret)
@@ -299,6 +296,11 @@ data_group <- c('STFWI', 'STM', 'FWI', 'M')
 lm_fit <-bind_cols(data_group, lm_sum) %>% as.tibble()
 colnames(lm_fit)[1] = 'LM'
 lm_fit
+
+library(broom)
+glance(fit_m)
+augment(fit_m)
+tidy(fit_m)
 
 ```
 
@@ -386,6 +388,8 @@ combine <- bind_rows(score_stfwi, score_stfwi, score_stm, res_stm, score_fwi, re
 
 combine_scores <- bind_cols(cols, combine)
 combine_scores
+
+knn_m$resample
 
 ```
 

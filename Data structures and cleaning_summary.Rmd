@@ -1,0 +1,884 @@
+---
+title: "Data structures and data cleaning"
+author: "Yuan Li"
+email: "yuanliutk@gmail.com"
+date: "2023-09-27"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{=html}
+<style type="text/css">
+body {
+font-size: 12pt;
+}
+
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Data types
+
+The main data type in R is vector, list, matrix and table. For each type, how to create, slice and what functions to apply are very important.
+
+### 1.1 String
+
+#### 1.1.1 Basic functions of string
+
+Understanding string needs the knowledge of vector and list.
+
+```{r}
+library(stringr)
+
+
+# Remove the white space
+str_1 <- " Hi WORLD "
+typeof(str_1)
+str_trim(str_1)
+str_1 %>% str_trim
+
+# Change upper and lower case
+str_1 %>% str_trim %>% str_to_lower
+str_1 %>% str_trim %>% str_to_upper
+str_1 %>% str_trim %>% str_to_title
+
+
+# Find element
+str_1 %>% str_detect(" ")
+
+# Replace 
+str_1 %>% str_replace(" ", '')
+
+"I want to lrn R, and I definitely wnt to lrn more." %>%
+  str_replace_all('lrn', 'learn')
+
+# Use regex to replace
+str_3  <-  "aBcDEfGHIj"
+str_replace(str_3, '[A-Z]', '-')
+str_replace_all(str_3, '[A-Z]', '-')
+
+sql_variations  <- c("SQL", "Sql", "sql")
+sql_uniform  <-  str_replace(sql_variations, "(?i)sql", "SQL")
+sql_uniform
+
+
+email_variations  <-  c('email', 'Email', 'e Mail',
+                        'e mail', 'E-mail', 'e-mail',
+                        'eMail', 'E-Mail', 'EMAIL')
+
+pattern <- "(?i)e[\\s\\-]?mail"
+email_uniform <- str_replace_all(email_variations, pattern, 'email') 
+email_uniform
+
+# Padding
+"data" %>% str_pad(width=20, side="both", pad=" ")
+
+# Split
+str_2 <- "I want to lrn R, and I definitely wnt to lrn more." %>%
+  str_split(' ')
+str_2
+typeof(str_2)
+
+str_2[[1]][1:3]
+
+
+# Extract string values
+
+str_4 <- 'nlass123'
+str_sub(str_4, -3, -1)
+str_sub(str_4, 6, -1)
+
+# Match
+
+str_5 <- "Python 3.7"
+str_match(str_5, "\\d.\\d")[1]
+
+
+# Covert form vector to string
+
+words <- c("I", "Have", "A", "Dream")
+words
+
+str_c(words, collapse=" ")
+
+```
+
+After split, the data type change from character to list. To slice it, needs to use [[]] to get the value and then slice it. The details can be seen in Section 1.3 `List`.
+
+#### 1.1.2 Time series
+
+```{r}
+library(lubridate)
+date1 <- "01011997"
+date2 <- "2019-03-04"
+
+
+date_1_s <- mdy(date1)
+date_1_s
+
+date_2_s <- ymd(date2)
+date_2_s
+
+
+year(date_2_s)
+month(date_2_s)
+day(date_2_s)
+week(date_2_s)
+
+date_1 <- "2020-04-01 14:20:59 EDT"
+date_1 %>%  ymd_hms(tz='EDT') 
+
+date_1 %>% wday()
+date_1 %>% yday()
+
+
+# Duration and period
+dur <- duration(day=1, hour=1, minute=30)
+perd <- period(years=1, months=1, days=1)
+ymd("2020-04-01") + perd
+ymd("2020-04-01") + dur
+
+```
+
+### 1.2 Vectors
+
+### 1.2.1 Define the vector
+
+```{r}
+# Use colons
+range_a <- 1:10
+range_a
+
+```
+
+```{r}
+# Use function seq
+seq_a <- seq(1, 10, 2)
+seq_a
+
+# repeated values
+rep(1:3, 2)
+
+```
+
+```{r}
+# Use c function
+c_a <- c(1, 2, 3, 4)
+c_a
+print(paste("Type of c_a: ", typeof(c_a)))
+
+# Type of 1L is integer.
+c_a_int <- c(1L, 2L, 3L, 4L)
+c_a_int
+print(paste("Type of c_a_int: ", typeof(c_a_int)))
+
+```
+
+```{r}
+# Logical vector
+is_a <- c(TRUE, FALSE, TRUE, FALSE)
+is_a 
+print(paste("Type of is_a is: ", typeof(is_a)))
+
+# Use logical vector to select values:
+c_a[is_a]
+
+```
+
+### 1.2.2 Operations of vector
+
+#### 1.2.2.1 Scaling up or down
+
+-   Appending
+
+```{r}
+# Appending
+combine <- c(range_a, c_a, seq_a, is_a )
+combine
+typeof(combine)
+
+```
+
+When logical vector is combined, TRUE is converted into 1 and FALSE to 0.
+
+-   Slicing and Removing
+
+```{r}
+ 
+# slicing: make the interested indices into a vector
+combine[range_a]
+combine[seq_a]
+combine[is_a]
+
+combine[c(TRUE)]
+combine[c(TRUE, FALSE)]
+combine[c(TRUE, FALSE, TRUE)]
+combine[c(TRUE, FALSE, TRUE, FALSE)]
+
+# Removing: rule out the indices not interested, use a negative symbol
+combine[-range_a]
+combine[-seq_a]
+combine[-is_a]
+
+
+```
+
+For numeric vector, the selected indices are the values in the vector. For logical vector, it is a state, one or two value is enough. If the vector is TRUE, it means all the indices are selected. [TRUE, FALSE], odd indices are selected. [TRUE, FALSE, TRUE, FALSE] has the same slicing as [TRUE, FALSE]
+
+#### 1.2.2.2 Mathematical functions
+
+```{r}
+# Length
+library(dplyr)
+length(combine)
+combine %>% length
+print(paste("The length of vector combine is: ", length(combine)))
+
+# Unique values
+unique(combine)
+combine %>% unique
+
+# Count of each element
+table_c <- combine %>% table 
+table_c 
+table_c[1]
+
+
+# Sum of all the elements
+sum(combine)
+print(paste("The sum of the elements in vector combine are: ", sum(combine)))
+
+
+# Mean of all the elements
+mean(combine)
+print(paste("The mean of the elements in vector combine are: ", mean(combine)))
+
+# Sort
+sort(range_a)
+
+
+# Use statement to filter
+range_a[range_a>3] # In essence using logical vector
+
+```
+
+#### 1.2.2.3 Giving a name to each eleent
+
+```{r}
+
+names(c_a) <- c("A", "B", 'C', 'D')
+typeof(c_a)
+
+# Using the indices to slice or removing
+c_a[c(1,3)]
+c_a[-c(1,3)]
+
+# Appending a vector, the vector won't have a name
+c(c_a, E=10)
+
+# Get the value without name
+c_a[[1]]
+c_a[['A']]
+
+
+
+```
+
+To obtain the vector value, it can only extract one value. Because the type after naming is the same, the functions still work.
+
+### 1.3 List
+
+In R, an additional attribute of the element in a vector can be assigned. It is named list. Using different slicing strategy, the list or the vector can be sliced.
+
+```{r}
+# Creating a list, or appending
+list(seq_a, range_a)
+
+list_a <- list(seq = seq_a, range = range_a)
+list_a
+typeof(list_a)
+
+
+# Slicing a list
+list_a[1]  
+list_a[[1]]  
+
+list_a['seq']
+typeof(list_a['seq'])
+
+list_a[['seq']]
+typeof(list_a[['seq']]) 
+
+# Removing, cannot use the nage
+
+list_c <- list(seq = seq_a, range = range_a, kit=c(1,2,58))
+list_c
+
+
+
+list_c[-c(1)]
+
+# Get the vector 
+
+list_c[-c(1)][[1]]
+
+# Get the cell
+list_c[-c(1)][[c(2, 3)]]
+
+list_c[TRUE]
+list_c[c(TRUE, FALSE)]
+list_c
+
+# Unlist
+list_c[1]
+unlist(list_c[1])
+
+```
+
+-   The name can be used to get the specific column: list and vector.
+-   The column numbers can be used to slicing and removing one/multiple columns. But the vector can only be extracted single column or one cell.
+-   Using [] for list, [[]] for vector.
+-   Only the vector can use the mathematical functions.
+
+### 1.4 Matrix
+
+#### 1.4.1 Create matrix
+
+-   Using matrix function to create matrix
+
+```{r}
+# Create matrix
+mat <- matrix(1:2, nrow = 2, ncol = 3)
+mat
+
+typeof(mat)
+
+# Extract the value
+mat[1, ]
+mat[,1]
+
+
+# Names
+
+colnames(mat) <- c('A', 'B', 'C')
+mat
+
+# 
+typeof(mat)
+
+mat[1, 'B']
+
+
+```
+
+-   Using cbind or rbind function to create matrix
+
+```{r}
+
+harvard <- c(1,1,1,1,3)
+stanford <- c(2,9,3,4,10)
+MIT <- c(3,3,2,2,1)
+cambridge <- c(4,2,6,13,48)
+oxford <- c(5,7,12,9,15)
+columbia <- c(6,13,13,12,4)
+university_matrix <- rbind(harvard, stanford, MIT, cambridge, oxford, columbia)
+university_matrix
+
+# The vector name shown in the row name
+typeof(university_matrix)
+colnames(university_matrix) <- c("world_rank", "quality_of_education", "influence", "broad_impact", "patents")
+
+university_matrix
+rownames(university_matrix)
+
+
+
+```
+
+-   The type of matrix is double or integer, meaning it is numeric.
+-   cbind or rbind are used to bind vectors. It can be used to append a vector to an existing matrix. bind_rows, bind_cols are to bind the rows or cols in a dataframe
+
+#### 1.4.2 Slice matrix
+
+Because matrix is 2-d array. We need to assign both the row and col to get locate the elements. Like slicing vector and list, we can use a vector of number, boolean, or rownames/colnames.
+
+```{r}
+# Vector of rownames, colnames
+university_matrix[c("harvard", "stanford", "MIT"), c("world_rank", "quality_of_education")]
+university_matrix[c("harvard", "stanford", "MIT"), ]
+
+
+# Vector of indices
+university_matrix[1: 3, 1:2]
+university_matrix[, 1]
+university_matrix[1:3, ]
+
+# Vector of indices
+university_matrix[c(TRUE, FALSE), c(TRUE, FALSE)]
+university_matrix[, c(TRUE, FALSE)]
+
+# Mixed
+university_matrix[c("harvard", "stanford", "MIT"), 1:2]
+
+
+# Conditional statement
+university_matrix[university_matrix[, 'patents'] > 5, ]
+
+
+# Remove
+university_matrix[ -c(1, 2), ]
+university_matrix[ -c(1, 2), -c(2,3)]
+
+university_matrix[ c(FALSE, FALSE, TRUE), c(TRUE, FALSE, TRUE)]
+
+```
+
+To remove the slices, numeric vector is allowed. Or set the row or column to remove to be FALSE.
+
+#### 1.4.3 Mathmatical operation
+
+```{r}
+# Whole matrix
+sum(university_matrix)
+mean(university_matrix)
+
+# Rows 
+rowSums(university_matrix)
+rowMeans(university_matrix)
+
+# Columns
+colSums(university_matrix)
+colMeans(university_matrix)
+
+# Rank
+rank(university_matrix)
+
+# Summary
+summary(university_matrix)
+
+
+```
+
+### 1.5 Dataframe
+
+#### 1.5.1 Create Dataframe
+
+The result from read csv and excel is a dataframe. But also, using other functions can also create data frame. So many functions are available to clean dataframe.
+
+```{r}
+
+# data.frame
+data.frame(x=1:5, y=2:6)
+
+# as.tibble
+library(tibble)
+df_tibble <- as.tibble(university_matrix, rownames=' ')
+df_tibble
+
+
+# As.data.frame
+df <- as.data.frame(university_matrix)
+df
+typeof(df)
+
+
+# Append 
+tt <- list(name=c(1,2,4, 8, 10, 11))
+bind_cols(df, tt)
+
+pp <- tibble(name=c(1,2,4, 8, 10, 11))
+bind_cols(df, pp)
+
+```
+
+#### 1.5.2 Slice data
+
+```{r}
+
+# Obtain small amount of data
+head(df, 10) # default is 5 
+tail(df, 10) # default is 5
+
+
+library(dplyr)
+sample(df, 10, replace=TRUE)
+sample_frac(df, 0.1)
+
+# Select the columns
+
+df$world_rank
+df[1]
+df[c('world_rank', 'quality_of_education')] 
+
+df[1:4, ]
+
+df %>% select(world_rank , patents)
+df %>% pull(world_rank, patents)
+
+# Unselect some rows or cols.
+df %>% select(1:4)
+df %>% select(-1, -4)
+df %>% select(-world_rank , -patents)
+
+df %>% select(where(is.numeric))
+
+
+df %>% select(world_rank , patents) %>% sum
+df %>% pull(world_rank, patents) %>% sum
+
+# Conditional statement to filter
+df[df$world_rank>3, ][c(1,3)]
+
+```
+
+-   Type of dataframe is list. So use [[]] to obtain the values. But for two column values, pull function works.
+-   Select function can select different columns.
+-   Pipeline can make the process more efficiently.
+
+#### 1.5.3 Basic functions
+
+```{r}
+
+# Check the dimension
+dimension <- dim(df)
+dimension
+
+# Check the datatype of each column
+glimpse(df)
+
+# Check if there are missing values
+colSums(is.na(df))
+
+# Create a new column
+df %>% mutate(tution=c(5000, 5500, 7800, 7900, 10000, 8100))
+
+# Summarize to get the statistic values
+df %>% summarize(sum = sum(world_rank), 
+                 n = n(),
+                 mean = mean(world_rank))
+
+# Get the statistics for each column
+library(tidyr)
+
+df %>% pivot_longer(cols = c(colnames(df)), names_to = "Column", values_to = "value") %>% group_by(Column) %>% 
+  summarize(sum = sum(value),
+            mean=mean(value),
+            median = median(value)) %>%
+  arrange(-mean)
+
+# filter
+df %>% filter(patents >10)
+df %>% filter(patents %in% c(1, 5, 10, 20))
+df %>% filter(!patents %in% c(1, 5, 10, 20))
+
+# Categorize the group
+
+df %>% mutate(Class=case_when(
+  world_rank <= 2 ~ 'First Class',
+  world_rank <= 4 ~ 'Second Class',
+  TRUE ~ 'Third Class'))
+
+df %>% mutate(Is_first_class=if_else(world_rank <= 2,'First Class', 'Second Class'))
+
+# Unique
+
+unique(df$world_rank)
+
+
+# duplicated
+
+sum(duplicated(df$world_rank))
+
+# distinct: remove all the duplicated values
+
+df %>% distinct(world_rank, .keep_all = TRUE)
+
+# cor: Pearson's r
+
+df %>% select(world_rank, influence) %>% cor(use="pairwise.complete.obs")
+
+```
+
+#### 1.5.4 Dataframe join
+
+```{r}
+
+f <- list(A=c(1,3,5,6), B=c(55, 88,45,12))
+g <- list(A=c(1,3,5,8, 9), C=c('Hi', 'Kitty', 'Yes',12, 'Good'))
+
+df1 <- as.tibble(f)
+df2 <- as.tibble(g)
+
+df1 %>% inner_join(df2, by='A')
+df1 %>% left_join(df2, by='A')
+df1 %>% right_join(df2, by='A')
+
+
+```
+
+### 1.6 JSON
+
+```{r}
+library(jsonlite)
+
+world_cup_str  <-  '
+[
+    {
+        "team_1": "France",
+        "team_2": "Croatia",
+        "game_type": "Final",
+        "score" : [4, 2]
+    },
+    {
+        "team_1": "Belgium",
+        "team_2": "England",
+        "game_type": "3rd/4th Playoff",
+        "score" : [2, 0]
+    }
+    ]
+'
+typeof(world_cup_str)
+
+# fromJSON turn the json data into dataframe
+world_cup_df <- fromJSON(world_cup_str)
+typeof(world_cup_df)
+
+
+```
+
+## 2. Data Cleaning
+
+To select the data we are interested in, customized functions or advanced functions has to be used. In addition, we also have to imputate the missing values, values inconsitence in our data using different functions.
+
+### 2.1 User defined functions
+
+```{r}
+# For loop
+for (i in 1:10) {
+  print(i+5)
+}
+
+
+for (i in list_c){
+  print(i)
+  print(typeof(i))
+}
+
+
+# If-else
+i =5
+if (i==1) {
+  print("The input is 1")
+} else {
+print("The input is not 1")
+}
+
+
+# Define a function
+
+add_x_y <- function () { 
+  t=0
+  for (x in 1:10) {
+    if (x%%2 == 0) {
+      t = t + x
+    }
+    
+  }
+  return(t)
+}
+
+add_x_y()
+
+
+
+
+
+# Input is a list
+
+new_add <- function(x,y, ...) {
+  return(list(...))
+}
+new_add(1,2, c(3, 4))
+
+
+new_add <- function(x,y, ...) {
+  current_sum = x + y
+  for (num in list(...)) {
+    current_sum = current_sum + num
+  }
+  return(current_sum)
+}
+
+new_add(1, 2, 3, 4)
+
+```
+
+### 2.2 Functions for data cleaning
+
+#### 2.2.1 Data inconsistency
+
+For one column, most of data is double but some are strings. It needs to make it consistent.
+
+```{r}
+
+# Change one column data to numeric
+library(readr)
+data <- tibble(test=c(1, 2, "5", 'Fail', 'None'))
+data
+
+data %>% mutate(test=as.numeric(test))
+data %>% mutate(test=parse_number(test))
+
+# Change multiple columns to be numeric
+library(dplyr)
+
+
+df %>% mutate(across(c('world_rank', 'influence'), as.numeric))
+df %>% mutate(across(c(1, 3), as.numeric))
+df %>% mutate(across(1:3, as.numeric))
+df %>% mutate(across(starts_with('broad'), as.numeric))
+df %>% mutate(across(contains('broad'), as.numeric))
+
+
+# str replace 
+email_variations  <-  c('email', 'Email', 'e Mail',
+                        'e mail', 'E-mail', 'e-mail',
+                        'eMail', 'E-Mail', 'EMAIL')
+
+pattern <- "(?i)e[\\s\\-]?mail"
+
+email_uniform <- str_replace_all(email_variations, pattern, 'email')
+email_uniform
+      
+
+
+```
+
+#### 2.2.2 Dealing with columns with missing values
+
+```{r}
+
+eg <- list(col1= c(1, 5, 7, 8, 'None'), col2=c(8, 40, 50, '5', '7'))
+df5 <- as.data.frame(eg)  %>% mutate(across(1:2, parse_number))
+df5
+
+# Check the number of missing value
+colSums(is.na(df5))
+
+# Mean
+colMeans(df5, na.rm=TRUE)
+
+# Just use the non-null data
+df5 %>% filter(!is.na(col1))
+
+# drop_na
+df5 %>% drop_na()
+
+# fill na with the column average value: if_else or case_when
+
+mean_1 <- mean(df5$col1, na.rm=TRUE)
+mean_1
+
+df5 %>% mutate(col1=if_else(is.na(col1), mean_1, col1))
+df5 %>% mutate(col1=case_when(
+  is.na(col1) ~ mean_1,
+  TRUE ~ col1)
+  )
+
+
+```
+
+#### 2.2.3 Element-wise operation: map function
+
+1). `map` function can process the whole columns as a vector element-wise, much faster than `for` loop. The output of map function is the result of applying the function to each element in columns. The output of map is a list. To get the value, we have to use [[]]. But there are some specific function to get the value based on the data type: map_int, map_dbl, map_chr, map_lgl and map_df 2). pmap can operate on elements in several columns
+
+```{r}
+library(purrr)
+
+new_df <- df5 %>% mutate(col1=case_when(
+  is.na(col1) ~ mean_1,
+  TRUE ~ col1))
+
+new_df
+
+# map function
+
+map(new_df, length)
+
+map_int(new_df, length)
+map_chr(new_df, class)
+
+# map with user-defined function
+
+map_df(new_df, function(x) x+1) 
+
+
+# pmap
+
+data1 <- c(1, 3, 5)
+data2 <- c(2, 4, 6)
+data3 <- c(8, 9, 7)
+
+data_list <- list(x=data1, y=data2, z=data3) %>% as_tibble
+data_list
+
+plus <- function(x, y, z) x + y + z # x,y,z here corresponds to the colnames
+
+sums <- pmap_int(data_list, plus)
+sums
+
+```
+
+## Common library and functions
+1. readr:
+  * read_csv   
+  * read_excel   
+  * parse_number
+2. dplyr
+  * %>% 
+  * glimpse
+  * filter    
+  * arrange   
+  * select    
+  * mutate    
+  * summarize   
+  * group_by
+3. tidyr
+  * tibble    
+  * pivot_longer    
+  * pivot_wider
+  * replace_na    
+  * nest
+4. stringr
+  * str_sub   
+  * str_match   
+  * str_replace   
+  * str_detect
+5. purrr
+  * map   
+  * pmap
+6. caret
+  * createDataPartition   
+  * train
+7. broom
+  * augment   
+  * glance    
+  * tidy
+8. lubridate
+  * ymd   
+  * year 
+  * wday   
+  * period    
+  * duration
+9. ggplot2
+  * ggplot
+  
+  
+  
+
